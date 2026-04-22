@@ -34,19 +34,97 @@ void OnDeinit(const int reason)
 
 
 // 4. The Event Loop (Fires every single time the price changes)
+// 4. The Event Loop
 void OnTick()
 {
-    // STATE MANAGEMENT: Do we already have an open trade?
-    // PositionsTotal() checks the global state of your account.
-    if(PositionsTotal() > 0) 
-    {
-        // If we are currently in a trade, we do absolutely nothing.
-        // We just return and wait for the next tick.
-        return; 
-    }
-
-    // --- PHASE 2 WILL GO HERE ---
-    // If the code reaches this line, it means PositionsTotal() == 0.
-    // This is where we will write the logic to look for the OB Rejection.
+    // 1. STATE MANAGEMENT
+    if(PositionsTotal() > 0) return; 
     
+    //Print(PositionsTotal()); 
+
+    // 2. DATA FETCHING
+    MqlRates candles[];
+    ArraySetAsSeries(candles, true);  
+    if(CopyRates(_Symbol, _Period, 0, 2, candles) < 2) return;
+
+    MqlRates live = candles[0];  
+    MqlRates prev = candles[1];  
+
+    // 3. UI DASHBOARD
+    string report = StringFormat(
+        "LIVE STATUS: %s\n"
+        "PRICE: %.2f | PREV CLOSE: %.2f\n"
+        "BALANCE: %.2f",
+        _Symbol, live.close, prev.close, AccountInfoDouble(ACCOUNT_BALANCE)
+    );
+    Comment(report); 
+
+    // --- PHASE 2: STRATEGY LOGIC ---
+
+    double bodySize = MathAbs(prev.close - prev.open);
+    double upperWick = prev.high - MathMax(prev.open, prev.close);
+    double lowerWick = MathMin(prev.open, prev.close) - prev.low;
+
+    bool isBearishRejection = (upperWick > (bodySize * 2.0) && bodySize > 0);
+    bool isBullishRejection = (lowerWick > (bodySize * 2.0) && bodySize > 0);
+
+    // --- PHASE 3 & 4: TRADING WITH SL/TP ---
+    double lotSize = 0.10; 
+
+    if(isBullishRejection)
+    {
+        double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+        
+        // SL is the low of the rejection candle
+        double sl = prev.low; 
+        
+        // TP is 2x the distance of our risk (1:2 Risk-Reward)
+        double risk = ask - sl;
+        double tp = ask + (risk * 2.0);
+
+        // Execute Buy: trade.Buy(lot, symbol, price, sl, tp)
+        if(trade.Buy(lotSize, _Symbol, ask, sl, tp))
+        {
+            string logMsg = StringFormat(
+                "ACTION: BUY | ENTRY: %.2f | SL: %.2f | TP: %.2f",
+                ask, sl, tp
+            );
+            WriteToLog(logMsg);
+        }
+    }
+    
+    if(isBearishRejection)
+    {
+        double bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+        
+        // SL is the high of the rejection candle
+        double sl = prev.high;
+        
+        // TP is 2x the risk
+        double risk = sl - bid;
+        double tp = bid - (risk * 2.0);
+
+        // Execute Sell: trade.Sell(lot, symbol, price, sl, tp)
+        if(trade.Sell(lotSize, _Symbol, bid, sl, tp))
+        {
+            string logMsg = StringFormat(
+                "ACTION: SELL | ENTRY: %.2f | SL: %.2f | TP: %.2f",
+                bid, sl, tp
+            );
+            WriteToLog(logMsg);
+        }
+    }
+}
+
+// Optimized Logger stays the same...
+void WriteToLog(string message)
+{
+    int fileHandle = FileOpen("OB_Bot_Trades.txt", FILE_WRITE|FILE_READ|FILE_TXT|FILE_SHARE_READ|FILE_ANSI);
+    if(fileHandle != INVALID_HANDLE)
+    {
+        FileSeek(fileHandle, 0, SEEK_END); 
+        string timeStr = TimeToString(TimeLocal(), TIME_DATE|TIME_SECONDS);
+        FileWrite(fileHandle, "[" + timeStr + "] " + message);
+        FileClose(fileHandle);
+    }
 }
