@@ -2,6 +2,14 @@
 // |                                               OB_Rejection_Bot   |
 // +------------------------------------------------------------------+
 #include <Trade/Trade.mqh> // Equivalent to: import { CTrade } from 'mt5-standard-lib'
+#include <vector>
+using namespace std;
+
+struct order{
+   double entry;
+   double takeProfit;
+   double stopLoss;
+};
 
 // 1. Global Variables (State)
 CTrade trade; // Instantiating our trade object (like: const trade = new CTrade();)
@@ -61,12 +69,15 @@ void OnTick()
 
     // --- PHASE 2: STRATEGY LOGIC ---
 
-    double bodySize = MathAbs(prev.close - prev.open);
-    double upperWick = prev.high - MathMax(prev.open, prev.close);
-    double lowerWick = MathMin(prev.open, prev.close) - prev.low;
+    //double bodySize = MathAbs(prev.close - prev.open);
+    //double upperWick = prev.high - MathMax(prev.open, prev.close);
+    //double lowerWick = MathMin(prev.open, prev.close) - prev.low;
 
-    bool isBearishRejection = (upperWick > (bodySize * 2.0) && bodySize > 0);
-    bool isBullishRejection = (lowerWick > (bodySize * 2.0) && bodySize > 0);
+    //bool isBearishRejection = (upperWick > (bodySize * 2.0) && bodySize > 0);
+    //bool isBullishRejection = (lowerWick > (bodySize * 2.0) && bodySize > 0);
+    
+    bool isBuyToSellOB = (isBuy(prev) && isSell(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
+    bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
 
     // --- PHASE 3 & 4: TRADING WITH SL/TP ---
     double lotSize = 0.10; 
@@ -127,4 +138,28 @@ void WriteToLog(string message)
         FileWrite(fileHandle, "[" + timeStr + "] " + message);
         FileClose(fileHandle);
     }
+}
+bool isBuy(MqlRates candle){
+   bool buyOrNot = candle.open < candle.close;
+   return buyOrNot;
+}
+bool isSell(MqlRates candle){
+   bool SellOrNot = candle.open > candle.close;
+   return SellOrNot;
+}
+//double bodySize = MathAbs(prev.close - prev.open);
+//double upperWick = prev.high - MathMax(prev.open, prev.close);
+//double lowerWick = MathMin(prev.open, prev.close) - prev.low;
+
+double bodySize(MqlRates candle){
+   double candleBodySize = MathAbs(candle.close - candle.open)
+   return candleBodySize;
+}
+double upperWick(MqlRates candle){
+   double candleUpperWick = candle.high - MathMax(candle.open,candle.close);
+   return candleUpperWick
+}
+double lowerWick(MqlRates candle){
+   double candleLowerWick = MathMin(candle.open,candle.close) - candle.low;
+   return candleLowerWickj;
 }
