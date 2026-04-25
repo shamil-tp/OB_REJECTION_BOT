@@ -2,7 +2,7 @@
 // |                                               OB_Rejection_Bot   |
 // +------------------------------------------------------------------+
 #include <Trade/Trade.mqh> // Equivalent to: import { CTrade } from 'mt5-standard-lib'
-#include <vector>
+#include <deque>
 using namespace std;
 
 struct order{
@@ -16,7 +16,7 @@ CTrade trade; // Instantiating our trade object (like: const trade = new CTrade(
 
 // Enforcing your strict rule. The exact string must match Deriv's symbol name.
 string targetSymbol = "Volatility 25 (1s) Index"; 
-
+deque<struct order> myOrders;
 
 // 2. Setup (Runs ONCE when you attach the bot to a chart)
 int OnInit()
@@ -55,8 +55,8 @@ void OnTick()
     ArraySetAsSeries(candles, true);  
     if(CopyRates(_Symbol, _Period, 0, 2, candles) < 2) return;
 
-    MqlRates live = candles[0];  
-    MqlRates prev = candles[1];  
+    MqlRates live = candles[1];  
+    MqlRates prev = candles[2];  
 
     // 3. UI DASHBOARD
     string report = StringFormat(
@@ -78,9 +78,20 @@ void OnTick()
     
     bool isBuyToSellOB = (isBuy(prev) && isSell(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
     bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
+    if(isBuyToSellOB){
+      //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
+      double sl = upperWick(prev)>upperWick(live) ? upperWick(prev) + (_Point * 200) : upperWick(live) + (_Point * 200);
+      double entryOne = prev.low - (_Point * 200);
+      double entryTwo = prev.close;
+      double entryThree = sl - (_Point * 200);
+      double tp = entryOne - (_Point * 1000);
+      
+     }
 
     // --- PHASE 3 & 4: TRADING WITH SL/TP ---
-    double lotSize = 0.10; 
+    double lotSize = 0.01; 
+    
+    
 
     if(isBullishRejection)
     {
