@@ -2,21 +2,36 @@
 // |                                               OB_Rejection_Bot   |
 // +------------------------------------------------------------------+
 #include <Trade/Trade.mqh> // Equivalent to: import { CTrade } from 'mt5-standard-lib'
-#include <deque>
-using namespace std;
+#include <Arrays/List.mqh>
 
-struct order{
-   double entry;
-   double takeProfit;
-   double stopLoss;
+class CFutureOrder : public CObject
+{
+public:
+   double   entryPrice;
+   double   stopLoss;
+   double   takeProfit;
+   double   volume;
+   ENUM_ORDER_TYPE type;
+
+   // Constructor to initialize all values at once
+   CFutureOrder(double p, double sl, double tp, double v, ENUM_ORDER_TYPE t)
+   {
+      entryPrice = p;
+      stopLoss   = sl;
+      takeProfit = tp;
+      volume     = v;
+      type       = t;
+   }
 };
+
+CList orderQueue;
 
 // 1. Global Variables (State)
 CTrade trade; // Instantiating our trade object (like: const trade = new CTrade();)
 
 // Enforcing your strict rule. The exact string must match Deriv's symbol name.
 string targetSymbol = "Volatility 25 (1s) Index"; 
-deque<struct order> myOrders;
+//deque<struct order> myOrders;
 
 // 2. Setup (Runs ONCE when you attach the bot to a chart)
 int OnInit()
@@ -46,17 +61,23 @@ void OnDeinit(const int reason)
 void OnTick()
 {
     // 1. STATE MANAGEMENT
-    if(PositionsTotal() > 0) return; 
-    
+    if(PositionsTotal() > 6) return;
+    CheckAndExecuteOrders();
     //Print(PositionsTotal()); 
 
     // 2. DATA FETCHING
     MqlRates candles[];
     ArraySetAsSeries(candles, true);  
-    if(CopyRates(_Symbol, _Period, 0, 2, candles) < 2) return;
-
+    if(CopyRates(_Symbol, _Period, 0, 3, candles) < 3) return;
+    
+    MqlRates confirmationCandle = candles[0];
     MqlRates live = candles[1];  
     MqlRates prev = candles[2];  
+
+      //strategy confirmation testing 
+    if(!(bodySize(live)>bodySize(prev))) return;
+    
+    
 
     // 3. UI DASHBOARD
     string report = StringFormat(
@@ -75,6 +96,7 @@ void OnTick()
 
     //bool isBearishRejection = (upperWick > (bodySize * 2.0) && bodySize > 0);
     //bool isBullishRejection = (lowerWick > (bodySize * 2.0) && bodySize > 0);
+    double lotSize = 0.01;
     
     bool isBuyToSellOB = (isBuy(prev) && isSell(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
     bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
@@ -82,18 +104,125 @@ void OnTick()
       //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
       double sl = upperWick(prev)>upperWick(live) ? upperWick(prev) + (_Point * 200) : upperWick(live) + (_Point * 200);
       double entryOne = prev.low - (_Point * 200);
-      double entryTwo = prev.close;
+      double entryTwo = prev.high - (bodySize(prev)/2);
       double entryThree = sl - (_Point * 200);
       double tp = entryOne - (_Point * 1000);
+      double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+      //bid type sell short
+      CFutureOrder *newSellOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
+      orderQueue.Add(newSellOrder1);
+      CFutureOrder *newSellOrder2 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
+      orderQueue.Add(newSellOrder2);
+      CFutureOrder *newSellOrder3 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
+      orderQueue.Add(newSellOrder3);
+     }
+     if(isSellToBuyOB){
+      double sl = lowerWick(prev)>lowerWick(live) ? lowerWick(prev) + (_Point * 200) : lowerWick(live) + (_Point * 200);
+      double entryOne = prev.high + (_Point * 200);
+      double entryTwo = prev.high - (bodySize(prev)/2);
+      double entryThree = sl + (_Point * 200);
+      double tp = entryOne + (_Point * 1000);
+      double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+      //ask type buy long
+      CFutureOrder *newBuyOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_Buy);
+      orderQueue.Add(newBuyOrder1);
+      CFutureOrder *newBuyOrder2 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_Buy);
+      orderQueue.Add(newBuyOrder2);
+      CFutureOrder *newBuyOrder3 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_Buy);
+      orderQueue.Add(newBuyOrder3);
       
      }
 
     // --- PHASE 3 & 4: TRADING WITH SL/TP ---
-    double lotSize = 0.01; 
+     
     
     
 
-    if(isBullishRejection)
+    
+}
+
+// Optimized Logger stays the same...
+void WriteToLog(string message,string msgType)
+{
+    int fileHandle = FileOpen("OB_Bot_Trades.txt", FILE_WRITE|FILE_READ|FILE_TXT|FILE_SHARE_READ|FILE_ANSI);
+    if(fileHandle != INVALID_HANDLE)
+    {
+        FileSeek(fileHandle, 0, SEEK_END); 
+        string timeStr = TimeToString(TimeLocal(), TIME_DATE|TIME_SECONDS);
+        FileWrite(fileHandle, "[" + timeStr + "] " + "--{"+ msgType +"}--  " + message );
+        FileClose(fileHandle);
+    }
+}
+bool isBuy(const MqlRates &candle){
+   bool buyOrNot = candle.open < candle.close;
+   return buyOrNot;
+}
+bool isSell(const MqlRates &candle){
+   bool SellOrNot = candle.open > candle.close;
+   return SellOrNot;
+}
+//double bodySize = MathAbs(prev.close - prev.open);
+//double upperWick = prev.high - MathMax(prev.open, prev.close);
+//double lowerWick = MathMin(prev.open, prev.close) - prev.low;
+
+double bodySize(const MqlRates &candle){
+   double candleBodySize = MathAbs(candle.close - candle.open);
+   return candleBodySize;
+}
+double upperWick(const MqlRates &candle){
+   double candleUpperWick = candle.high - MathMax(candle.open,candle.close);
+   return candleUpperWick;
+}
+double lowerWick(const MqlRates &candle){
+   double candleLowerWick = MathMin(candle.open,candle.close) - candle.low;
+   return candleLowerWick;
+}
+
+void CheckAndExecuteOrders()
+{
+   // Use a pointer to navigate the list
+   CFutureOrder *currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
+   double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+   double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+
+   while(currentOrder != NULL)
+   {
+      // Capture the NEXT item before potentially deleting the current one
+      CFutureOrder *nextOrder = (CFutureOrder*)orderQueue.GetNextNode();
+
+      bool priceHit = false;
+      
+      // Basic check: If Buy Stop/Limit or Sell Stop/Limit
+      if(currentOrder.type == ORDER_TYPE_BUY && currentAsk <= currentOrder.entryPrice) priceHit = true;
+      if(currentOrder.type == ORDER_TYPE_SELL && currentBid >= currentOrder.entryPrice) priceHit = true;
+
+      if(priceHit)
+      {
+         Print("Executing Order: Entry ", currentOrder.entryPrice, " SL: ", currentOrder.stopLoss);
+         
+         // 1. PLACE TRADE CODE HERE (using currentOrder.stopLoss and currentOrder.takeProfit)
+         // 1. PLACE TRADE CODE HERE (using currentOrder.stopLoss and currentOrder.takeProfit)
+         if(currentOrder.type == ORDER_TYPE_BUY)
+         {
+            trade.Buy(currentOrder.volume, _Symbol, currentAsk, currentOrder.stopLoss, currentOrder.takeProfit);
+         }
+         
+         if(currentOrder.type == ORDER_TYPE_SELL)
+         {
+            trade.Sell(currentOrder.volume, _Symbol, currentBid, currentOrder.stopLoss, currentOrder.takeProfit);
+         }
+         // 2. Remove from list and free memory
+         orderQueue.DetachCurrent();
+         delete currentOrder;
+      }
+
+      currentOrder = nextOrder; // Move to the next node in the list
+   }
+}
+
+/* 
+
+if(isBullishRejection)
     {
         double ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         
@@ -136,41 +265,6 @@ void OnTick()
             WriteToLog(logMsg);
         }
     }
-}
 
-// Optimized Logger stays the same...
-void WriteToLog(string message)
-{
-    int fileHandle = FileOpen("OB_Bot_Trades.txt", FILE_WRITE|FILE_READ|FILE_TXT|FILE_SHARE_READ|FILE_ANSI);
-    if(fileHandle != INVALID_HANDLE)
-    {
-        FileSeek(fileHandle, 0, SEEK_END); 
-        string timeStr = TimeToString(TimeLocal(), TIME_DATE|TIME_SECONDS);
-        FileWrite(fileHandle, "[" + timeStr + "] " + message);
-        FileClose(fileHandle);
-    }
-}
-bool isBuy(MqlRates candle){
-   bool buyOrNot = candle.open < candle.close;
-   return buyOrNot;
-}
-bool isSell(MqlRates candle){
-   bool SellOrNot = candle.open > candle.close;
-   return SellOrNot;
-}
-//double bodySize = MathAbs(prev.close - prev.open);
-//double upperWick = prev.high - MathMax(prev.open, prev.close);
-//double lowerWick = MathMin(prev.open, prev.close) - prev.low;
 
-double bodySize(MqlRates candle){
-   double candleBodySize = MathAbs(candle.close - candle.open)
-   return candleBodySize;
-}
-double upperWick(MqlRates candle){
-   double candleUpperWick = candle.high - MathMax(candle.open,candle.close);
-   return candleUpperWick
-}
-double lowerWick(MqlRates candle){
-   double candleLowerWick = MathMin(candle.open,candle.close) - candle.low;
-   return candleLowerWickj;
-}
+*/
