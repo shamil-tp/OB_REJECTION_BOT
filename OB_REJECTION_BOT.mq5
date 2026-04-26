@@ -75,7 +75,7 @@ void OnTick()
     MqlRates prev = candles[2];  
 
       //strategy confirmation testing 
-    if(!(bodySize(live)>bodySize(prev))) return;
+    //if(!(bodySize(live)>bodySize(prev))) return;
     
     
 
@@ -101,8 +101,10 @@ void OnTick()
     bool isBuyToSellOB = (isBuy(prev) && isSell(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
     bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
     if(isBuyToSellOB){
+            Print("Found [Buy To Sell OB] :");
+        
       //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
-      double sl = upperWick(prev)>upperWick(live) ? upperWick(prev) + (_Point * 200) : upperWick(live) + (_Point * 200);
+      double sl = upperWick(prev)>upperWick(live) ? prev.high + (_Point * 200) : live.high + (_Point * 200);
       double entryOne = prev.low - (_Point * 200);
       double entryTwo = prev.high - (bodySize(prev)/2);
       double entryThree = sl - (_Point * 200);
@@ -111,24 +113,27 @@ void OnTick()
       //bid type sell short
       CFutureOrder *newSellOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
       orderQueue.Add(newSellOrder1);
+
       CFutureOrder *newSellOrder2 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
       orderQueue.Add(newSellOrder2);
       CFutureOrder *newSellOrder3 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
       orderQueue.Add(newSellOrder3);
      }
      if(isSellToBuyOB){
-      double sl = lowerWick(prev)>lowerWick(live) ? lowerWick(prev) + (_Point * 200) : lowerWick(live) + (_Point * 200);
+            Print("Found [Sell To Buy OB] :");
+
+      double sl = lowerWick(prev)>lowerWick(live) ? prev.high + (_Point * 200) : live.high + (_Point * 200);
       double entryOne = prev.high + (_Point * 200);
       double entryTwo = prev.high - (bodySize(prev)/2);
       double entryThree = sl + (_Point * 200);
       double tp = entryOne + (_Point * 1000);
       double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
       //ask type buy long
-      CFutureOrder *newBuyOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_Buy);
+      CFutureOrder *newBuyOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_BUY);
       orderQueue.Add(newBuyOrder1);
-      CFutureOrder *newBuyOrder2 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_Buy);
+      CFutureOrder *newBuyOrder2 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_BUY);
       orderQueue.Add(newBuyOrder2);
-      CFutureOrder *newBuyOrder3 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_Buy);
+      CFutureOrder *newBuyOrder3 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_BUY);
       orderQueue.Add(newBuyOrder3);
       
      }
@@ -149,7 +154,8 @@ void WriteToLog(string message,string msgType)
     {
         FileSeek(fileHandle, 0, SEEK_END); 
         string timeStr = TimeToString(TimeLocal(), TIME_DATE|TIME_SECONDS);
-        FileWrite(fileHandle, "[" + timeStr + "] " + "--{"+ msgType +"}--  " + message );
+        //FileWrite(fileHandle, "[" + timeStr + "] " + "--{"+ msgType +"}--  " + message );
+        FileWrite(fileHandle, "[" + timeStr + "] "+ message );
         FileClose(fileHandle);
     }
 }
@@ -198,17 +204,20 @@ void CheckAndExecuteOrders()
 
       if(priceHit)
       {
+        
          Print("Executing Order: Entry ", currentOrder.entryPrice, " SL: ", currentOrder.stopLoss);
          
          // 1. PLACE TRADE CODE HERE (using currentOrder.stopLoss and currentOrder.takeProfit)
          // 1. PLACE TRADE CODE HERE (using currentOrder.stopLoss and currentOrder.takeProfit)
          if(currentOrder.type == ORDER_TYPE_BUY)
          {
+            Print("Executing BUY: entry"+ currentOrder.volume +" :: "+ _Symbol +" :: "+ currentAsk +" :: "+ currentOrder.stopLoss +" :: "+ currentOrder.takeProfit);
             trade.Buy(currentOrder.volume, _Symbol, currentAsk, currentOrder.stopLoss, currentOrder.takeProfit);
          }
          
          if(currentOrder.type == ORDER_TYPE_SELL)
          {
+            Print("Executing SELL: entry"+ currentOrder.volume +" :: "+ _Symbol +" :: "+ currentAsk +" :: "+ currentOrder.stopLoss +" :: "+ currentOrder.takeProfit);
             trade.Sell(currentOrder.volume, _Symbol, currentBid, currentOrder.stopLoss, currentOrder.takeProfit);
          }
          // 2. Remove from list and free memory
