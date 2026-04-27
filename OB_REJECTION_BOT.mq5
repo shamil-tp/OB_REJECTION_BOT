@@ -21,6 +21,7 @@ public:
       takeProfit = tp;
       volume     = v;
       type       = t;
+      Print("CREATING ORDER[ "+t+" ] OBJECT:: ENTRY PRICE: " + p +" STOP LOSS: "+ sl+ " TAKE PROFIT: " + tp +" VOLUME: "+ v + " NEW ORDER CREATED WITH THIS");
    }
 };
 
@@ -51,7 +52,8 @@ int OnInit()
 
 // 3. Cleanup (Runs ONCE when you remove the bot)
 void OnDeinit(const int reason)
-{
+{  
+      Print(&orderQueue);
     Print("Bot shutting down. Reason code: ", reason);
 }
 
@@ -110,6 +112,8 @@ void OnTick()
       double entryThree = sl - (_Point * 200);
       double tp = entryOne - (_Point * 1000);
       double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+
+      Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
       //bid type sell short
       CFutureOrder *newSellOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
       orderQueue.Add(newSellOrder1);
@@ -128,6 +132,8 @@ void OnTick()
       double entryThree = sl + (_Point * 200);
       double tp = entryOne + (_Point * 1000);
       double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+      Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
+
       //ask type buy long
       CFutureOrder *newBuyOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_BUY);
       orderQueue.Add(newBuyOrder1);
