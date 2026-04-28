@@ -52,9 +52,44 @@ int OnInit()
 
 // 3. Cleanup (Runs ONCE when you remove the bot)
 void OnDeinit(const int reason)
-{  
-      Print(&orderQueue);
+{
+    Print("--- Final Report ---");
     Print("Bot shutting down. Reason code: ", reason);
+    
+    // Check how many orders never triggered
+    Print("Orders remaining in queue: ", orderQueue.Total());
+
+    // Iterate and print details of stuck orders
+    CFutureOrder *currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
+    while(currentOrder != NULL)
+    {
+        PrintFormat("Stuck Order: Entry %.2f | SL %.2f | Type %s", 
+                    currentOrder.entryPrice, 
+                    currentOrder.stopLoss, 
+                    EnumToString(currentOrder.type));
+                    
+        currentOrder = (CFutureOrder*)orderQueue.GetNextNode();
+    }
+
+    // CRITICAL: Clear memory to prevent memory leaks in the tester
+    orderQueue.Clear(); 
+}
+
+double OnTester()
+{
+    Print("--- TEST COMPLETE ---");
+    Print("Orders still in queue: ", orderQueue.Total());
+    
+    // You can still perform your loop here to see what went wrong
+    CFutureOrder *currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
+    while(currentOrder != NULL)
+    {
+        PrintFormat("Unexecuted Order Type %s at Price %.2f", 
+                    EnumToString(currentOrder.type), currentOrder.entryPrice);
+        currentOrder = (CFutureOrder*)orderQueue.GetNextNode();
+    }
+    
+    return(0.0);
 }
 
 
@@ -192,46 +227,48 @@ double lowerWick(const MqlRates &candle){
 
 void CheckAndExecuteOrders()
 {
-   // Use a pointer to navigate the list
-   CFutureOrder *currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
+   if(orderQueue.Total() == 0) return;
+
    double currentBid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
    double currentAsk = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
 
+   // Start from the beginning
+   CFutureOrder *currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
+
    while(currentOrder != NULL)
    {
-      // Capture the NEXT item before potentially deleting the current one
-      CFutureOrder *nextOrder = (CFutureOrder*)orderQueue.GetNextNode();
-
       bool priceHit = false;
+
+      // Logic for BUY orders (Wait for price to drop TO or BELOW the entry)
+      if(currentOrder.type == ORDER_TYPE_BUY) {
+         if(currentAsk <= currentOrder.entryPrice) priceHit = true;
+      }
       
-      // Basic check: If Buy Stop/Limit or Sell Stop/Limit
-      if(currentOrder.type == ORDER_TYPE_BUY && currentAsk <= currentOrder.entryPrice) priceHit = true;
-      if(currentOrder.type == ORDER_TYPE_SELL && currentBid >= currentOrder.entryPrice) priceHit = true;
+      // Logic for SELL orders (Wait for price to rise TO or ABOVE the entry)
+      else if(currentOrder.type == ORDER_TYPE_SELL) {
+         if(currentBid >= currentOrder.entryPrice) priceHit = true;
+      }
 
       if(priceHit)
       {
-        
-         Print("Executing Order: Entry ", currentOrder.entryPrice, " SL: ", currentOrder.stopLoss);
-         
-         // 1. PLACE TRADE CODE HERE (using currentOrder.stopLoss and currentOrder.takeProfit)
-         // 1. PLACE TRADE CODE HERE (using currentOrder.stopLoss and currentOrder.takeProfit)
+         // 1. Execute
          if(currentOrder.type == ORDER_TYPE_BUY)
-         {
-            Print("Executing BUY: entry"+ currentOrder.volume +" :: "+ _Symbol +" :: "+ currentAsk +" :: "+ currentOrder.stopLoss +" :: "+ currentOrder.takeProfit);
             trade.Buy(currentOrder.volume, _Symbol, currentAsk, currentOrder.stopLoss, currentOrder.takeProfit);
-         }
-         
-         if(currentOrder.type == ORDER_TYPE_SELL)
-         {
-            Print("Executing SELL: entry"+ currentOrder.volume +" :: "+ _Symbol +" :: "+ currentAsk +" :: "+ currentOrder.stopLoss +" :: "+ currentOrder.takeProfit);
+         else
             trade.Sell(currentOrder.volume, _Symbol, currentBid, currentOrder.stopLoss, currentOrder.takeProfit);
-         }
-         // 2. Remove from list and free memory
-         orderQueue.DetachCurrent();
-         delete currentOrder;
-      }
 
-      currentOrder = nextOrder; // Move to the next node in the list
+         // 2. Remove and Delete
+         orderQueue.DetachCurrent(); // List handles the internal pointer move
+         delete currentOrder;
+         
+         // 3. IMPORTANT: After detaching, we must restart or carefully get the NEW current node
+         currentOrder = (CFutureOrder*)orderQueue.GetCurrentNode();
+      }
+      else 
+      {
+         // Only move to next if we didn't delete the current one
+         currentOrder = (CFutureOrder*)orderQueue.GetNextNode();
+      }
    }
 }
 
