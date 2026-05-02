@@ -32,6 +32,7 @@ CTrade trade; // Instantiating our trade object (like: const trade = new CTrade(
 
 // Enforcing your strict rule. The exact string must match Deriv's symbol name.
 string targetSymbol = "Volatility 25 (1s) Index"; 
+datetime lastProcessedCandleTime = 0; // NEW: Track last processed candle time to avoid adding orders on every tick
 //deque<struct order> myOrders;
 
 // 2. Setup (Runs ONCE when you attach the bot to a chart)
@@ -98,8 +99,8 @@ double OnTester()
 void OnTick()
 {
     // 1. STATE MANAGEMENT
-    if(PositionsTotal() > 6) return;
     CheckAndExecuteOrders();
+    if(PositionsTotal() >= 6) return;
     //Print(PositionsTotal()); 
 
     // 2. DATA FETCHING
@@ -126,58 +127,61 @@ void OnTick()
     Comment(report); 
 
     // --- PHASE 2: STRATEGY LOGIC ---
-
-    //double bodySize = MathAbs(prev.close - prev.open);
-    //double upperWick = prev.high - MathMax(prev.open, prev.close);
-    //double lowerWick = MathMin(prev.open, prev.close) - prev.low;
-
-    //bool isBearishRejection = (upperWick > (bodySize * 2.0) && bodySize > 0);
-    //bool isBullishRejection = (lowerWick > (bodySize * 2.0) && bodySize > 0);
-    double lotSize = 0.01;
-    
-    bool isBuyToSellOB = (isBuy(prev) && isSell(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
-    bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
-    if(isBuyToSellOB){
-            Print("Found [Buy To Sell OB] :");
+    if(live.time != lastProcessedCandleTime)
+    {
+        double lotSize = 0.01;
         
-      //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
-      double sl = upperWick(prev)>upperWick(live) ? prev.high + (_Point * 200) : live.high + (_Point * 200);
-      double entryOne = prev.low - (_Point * 200);
-      double entryTwo = prev.high - (bodySize(prev)/2);
-      double entryThree = sl - (_Point * 200);
-      double tp = entryOne - (_Point * 1000);
-      double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+        bool isBuyToSellOB = (isBuy(prev) && isSell(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
+        bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
+        
+        if(isBuyToSellOB){
+            Print("Found [Buy To Sell OB] :");
+            
+            //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
+            double sl = upperWick(prev)>upperWick(live) ? prev.high + (_Point * 200) : live.high + (_Point * 200);
+            double entryOne = prev.low - (_Point * 200);
+            double entryTwo = prev.high - (bodySize(prev)/2);
+            double entryThree = sl - (_Point * 200);
+            double tp = entryOne - (_Point * 1000);
+            double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
 
-      Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
-      //bid type sell short
-      CFutureOrder *newSellOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
-      orderQueue.Add(newSellOrder1);
+            Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
+            //bid type sell short
+            CFutureOrder *newSellOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_SELL);
+            orderQueue.Add(newSellOrder1);
 
-      CFutureOrder *newSellOrder2 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
-      orderQueue.Add(newSellOrder2);
-      CFutureOrder *newSellOrder3 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_SELL);
-      orderQueue.Add(newSellOrder3);
-     }
-     if(isSellToBuyOB){
+            CFutureOrder *newSellOrder2 = new CFutureOrder(entryTwo, sl, tp, volume, ORDER_TYPE_SELL);
+            orderQueue.Add(newSellOrder2);
+            
+            CFutureOrder *newSellOrder3 = new CFutureOrder(entryThree, sl, tp, volume, ORDER_TYPE_SELL);
+            orderQueue.Add(newSellOrder3);
+        }
+        
+        if(isSellToBuyOB){
             Print("Found [Sell To Buy OB] :");
 
-      double sl = lowerWick(prev)>lowerWick(live) ? prev.high + (_Point * 200) : live.high + (_Point * 200);
-      double entryOne = prev.high + (_Point * 200);
-      double entryTwo = prev.high - (bodySize(prev)/2);
-      double entryThree = sl + (_Point * 200);
-      double tp = entryOne + (_Point * 1000);
-      double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
-      Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
+            double sl = lowerWick(prev)>lowerWick(live) ? prev.low - (_Point * 200) : live.low - (_Point * 200);
+            double entryOne = prev.high + (_Point * 200);
+            double entryTwo = prev.high - (bodySize(prev)/2);
+            double entryThree = sl + (_Point * 200);
+            double tp = entryOne + (_Point * 1000);
+            double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+            Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
 
-      //ask type buy long
-      CFutureOrder *newBuyOrder1 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_BUY);
-      orderQueue.Add(newBuyOrder1);
-      CFutureOrder *newBuyOrder2 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_BUY);
-      orderQueue.Add(newBuyOrder2);
-      CFutureOrder *newBuyOrder3 =new CFutureOrder(entryOne,sl,tp,volume,ORDER_TYPE_BUY);
-      orderQueue.Add(newBuyOrder3);
-      
-     }
+            //ask type buy long
+            CFutureOrder *newBuyOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_BUY);
+            orderQueue.Add(newBuyOrder1);
+            
+            CFutureOrder *newBuyOrder2 = new CFutureOrder(entryTwo, sl, tp, volume, ORDER_TYPE_BUY);
+            orderQueue.Add(newBuyOrder2);
+            
+            CFutureOrder *newBuyOrder3 = new CFutureOrder(entryThree, sl, tp, volume, ORDER_TYPE_BUY);
+            orderQueue.Add(newBuyOrder3);
+        }
+        
+        // Update the time so we don't process this same candle again
+        lastProcessedCandleTime = live.time;
+    }
 
     // --- PHASE 3 & 4: TRADING WITH SL/TP ---
      
@@ -252,17 +256,27 @@ void CheckAndExecuteOrders()
       if(priceHit)
       {
          // 1. Execute
+         bool tradeSuccess = false;
          if(currentOrder.type == ORDER_TYPE_BUY)
-            trade.Buy(currentOrder.volume, _Symbol, currentAsk, currentOrder.stopLoss, currentOrder.takeProfit);
+            tradeSuccess = trade.Buy(currentOrder.volume, _Symbol, currentAsk, currentOrder.stopLoss, currentOrder.takeProfit);
          else
-            trade.Sell(currentOrder.volume, _Symbol, currentBid, currentOrder.stopLoss, currentOrder.takeProfit);
+            tradeSuccess = trade.Sell(currentOrder.volume, _Symbol, currentBid, currentOrder.stopLoss, currentOrder.takeProfit);
+
+         if(!tradeSuccess) {
+            Print("TRADE FAILED! Order Type: ", EnumToString(currentOrder.type), 
+                  " | Entry: ", currentOrder.entryPrice,
+                  " | Volume: ", currentOrder.volume,
+                  " | Error: ", trade.ResultRetcodeDescription());
+         } else {
+            Print("TRADE EXECUTED SUCCESSFULLY! Type: ", EnumToString(currentOrder.type));
+         }
 
          // 2. Remove and Delete
          orderQueue.DetachCurrent(); // List handles the internal pointer move
          delete currentOrder;
          
-         // 3. IMPORTANT: After detaching, we must restart or carefully get the NEW current node
-         currentOrder = (CFutureOrder*)orderQueue.GetCurrentNode();
+         // 3. IMPORTANT: After detaching, we restart from the beginning to ensure we don't miss any node or use a broken pointer
+         currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
       }
       else 
       {
