@@ -129,7 +129,7 @@ void OnTick()
     // --- PHASE 2: STRATEGY LOGIC ---
     if(live.time != lastProcessedCandleTime)
     {
-        double lotSize = 0.01;
+        double lotSize = 0.005; // Use minimum lot size for Vol 25 (1s)
         
         bool isBuyToSellOB = (isBuy(prev) && isSell(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
         bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
@@ -138,12 +138,12 @@ void OnTick()
             Print("Found [Buy To Sell OB] :");
             
             //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
-            double sl = upperWick(prev)>upperWick(live) ? prev.high + (_Point * 200) : live.high + (_Point * 200);
-            double entryOne = prev.low - (_Point * 200);
+            double sl = upperWick(prev)>upperWick(live) ? prev.high + (_Point * 1500) : live.high + (_Point * 1500);
+            double entryOne = prev.low - (_Point * 1500);
             double entryTwo = prev.high - (bodySize(prev)/2);
-            double entryThree = sl - (_Point * 200);
-            double tp = entryOne - (_Point * 1000);
-            double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+            double entryThree = sl - (_Point * 1500);
+            double tp = entryOne - (_Point * 3000);
+            double volume = lotSize; // FIXED: Do not multiply by Account Balance!
 
             Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
             //bid type sell short
@@ -160,12 +160,12 @@ void OnTick()
         if(isSellToBuyOB){
             Print("Found [Sell To Buy OB] :");
 
-            double sl = lowerWick(prev)>lowerWick(live) ? prev.low - (_Point * 200) : live.low - (_Point * 200);
-            double entryOne = prev.high + (_Point * 200);
+            double sl = lowerWick(prev)>lowerWick(live) ? prev.low - (_Point * 1500) : live.low - (_Point * 1500);
+            double entryOne = prev.high + (_Point * 1500);
             double entryTwo = prev.high - (bodySize(prev)/2);
-            double entryThree = sl + (_Point * 200);
-            double tp = entryOne + (_Point * 1000);
-            double volume = AccountInfoDouble(ACCOUNT_BALANCE) * lotSize;
+            double entryThree = sl + (_Point * 1500);
+            double tp = entryOne + (_Point * 3000);
+            double volume = lotSize; // FIXED: Do not multiply by Account Balance!
             Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
 
             //ask type buy long
