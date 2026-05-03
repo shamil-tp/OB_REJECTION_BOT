@@ -21,7 +21,7 @@ public:
       takeProfit = tp;
       volume     = v;
       type       = t;
-      Print("CREATING ORDER[ "+t+" ] OBJECT:: ENTRY PRICE: " + p +" STOP LOSS: "+ sl+ " TAKE PROFIT: " + tp +" VOLUME: "+ v + " NEW ORDER CREATED WITH THIS");
+      //Print("CREATING ORDER[ "+t+" ] OBJECT:: ENTRY PRICE: " + p +" STOP LOSS: "+ sl+ " TAKE PROFIT: " + tp +" VOLUME: "+ v + " NEW ORDER CREATED WITH THIS");
    }
 };
 
@@ -62,7 +62,7 @@ void OnDeinit(const int reason)
 
     // Iterate and print details of stuck orders
     CFutureOrder *currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
-    while(currentOrder != NULL)
+    /*while(currentOrder != NULL)
     {
         PrintFormat("Stuck Order: Entry %.2f | SL %.2f | Type %s", 
                     currentOrder.entryPrice, 
@@ -71,7 +71,7 @@ void OnDeinit(const int reason)
                     
         currentOrder = (CFutureOrder*)orderQueue.GetNextNode();
     }
-
+   */
     // CRITICAL: Clear memory to prevent memory leaks in the tester
     orderQueue.Clear(); 
 }
@@ -83,13 +83,13 @@ double OnTester()
     
     // You can still perform your loop here to see what went wrong
     CFutureOrder *currentOrder = (CFutureOrder*)orderQueue.GetFirstNode();
-    while(currentOrder != NULL)
+    /*while(currentOrder != NULL)
     {
         PrintFormat("Unexecuted Order Type %s at Price %.2f", 
                     EnumToString(currentOrder.type), currentOrder.entryPrice);
         currentOrder = (CFutureOrder*)orderQueue.GetNextNode();
     }
-    
+    */
     return(0.0);
 }
 
@@ -99,7 +99,7 @@ double OnTester()
 void OnTick()
 {
     // 1. STATE MANAGEMENT
-    CheckAndExecuteOrders();
+    //CheckAndExecuteOrders();
     if(PositionsTotal() >= 6) return;
     //Print(PositionsTotal()); 
 
@@ -135,7 +135,7 @@ void OnTick()
         bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
         
         if(isBuyToSellOB){
-            Print("Found [Buy To Sell OB] :");
+            Print("Found [Buy To Sell OB] ::" + "BUY:" + prev.time + prev.open + "SELL: "+ live.time + live.open);
             
             //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
             double sl = upperWick(prev)>upperWick(live) ? prev.high + (_Point * 1500) : live.high + (_Point * 1500);
@@ -145,7 +145,7 @@ void OnTick()
             double tp = entryOne - (_Point * 3000);
             double volume = lotSize; // FIXED: Do not multiply by Account Balance!
 
-            Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
+            //Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
             //bid type sell short
             CFutureOrder *newSellOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_SELL);
             orderQueue.Add(newSellOrder1);
@@ -158,7 +158,8 @@ void OnTick()
         }
         
         if(isSellToBuyOB){
-            Print("Found [Sell To Buy OB] :");
+            //Print("Found [Sell To Buy OB] :");
+            Print("Found [Sell To Buy OB] ::" + "SELL:" + prev.time + prev.open + "BUY: "+ live.time + live.open);
 
             double sl = lowerWick(prev)>lowerWick(live) ? prev.low - (_Point * 1500) : live.low - (_Point * 1500);
             double entryOne = prev.high + (_Point * 1500);
@@ -166,7 +167,7 @@ void OnTick()
             double entryThree = sl + (_Point * 1500);
             double tp = entryOne + (_Point * 3000);
             double volume = lotSize; // FIXED: Do not multiply by Account Balance!
-            Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
+            //Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
 
             //ask type buy long
             CFutureOrder *newBuyOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_BUY);
