@@ -7,21 +7,21 @@
 class CFutureOrder : public CObject
 {
 public:
-   double   entryPrice;
-   double   stopLoss;
-   double   takeProfit;
-   double   volume;
+   double entryPrice;
+   double stopLoss;
+   double takeProfit;
+   double volume;
    ENUM_ORDER_TYPE type;
+   datetime obTime; // NEW: Store the timestamp of the OB
 
-   // Constructor to initialize all values at once
-   CFutureOrder(double p, double sl, double tp, double v, ENUM_ORDER_TYPE t)
+   CFutureOrder(double p, double sl, double tp, double v, ENUM_ORDER_TYPE t, datetime obT)
    {
       entryPrice = p;
       stopLoss   = sl;
       takeProfit = tp;
       volume     = v;
       type       = t;
-      //Print("CREATING ORDER[ "+t+" ] OBJECT:: ENTRY PRICE: " + p +" STOP LOSS: "+ sl+ " TAKE PROFIT: " + tp +" VOLUME: "+ v + " NEW ORDER CREATED WITH THIS");
+      obTime     = obT; // Save the OB time here
    }
 };
 
@@ -143,18 +143,20 @@ void OnTick()
             double entryTwo = prev.high - (bodySize(prev)/2);
             double entryThree = sl - (_Point * 1500);
             double tp = entryOne - (_Point * 3000);
-            double volume = lotSize; // FIXED: Do not multiply by Account Balance!
+            double volume1 = lotSize; // FIXED: Do not multiply by Account Balance!
+            double volume2 = 0.01; // FIXED: Do not multiply by Account Balance!
+            double volume3 = 0.02; // FIXED: Do not multiply by Account Balance!
 
             //Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
             Print("Found [Buy To Sell OB] ::" + "BUY:" + prev.time + prev.open + "SELL: "+ live.time + live.open + " :: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ::==ENTRIES ("+entryOne+" /"+entryTwo+" /"+entryThree);
             //bid type sell short
-            CFutureOrder *newSellOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_SELL);
+            CFutureOrder *newSellOrder1 = new CFutureOrder(entryOne, sl, tp, volume1, ORDER_TYPE_SELL,prev.time);
             orderQueue.Add(newSellOrder1);
 
-            CFutureOrder *newSellOrder2 = new CFutureOrder(entryTwo, sl, tp, volume, ORDER_TYPE_SELL);
+            CFutureOrder *newSellOrder2 = new CFutureOrder(entryTwo, sl, tp, volume2, ORDER_TYPE_SELL,prev.time);
             orderQueue.Add(newSellOrder2);
             
-            CFutureOrder *newSellOrder3 = new CFutureOrder(entryThree, sl, tp, volume, ORDER_TYPE_SELL);
+            CFutureOrder *newSellOrder3 = new CFutureOrder(entryThree, sl, tp, volume3, ORDER_TYPE_SELL,prev.time);
             orderQueue.Add(newSellOrder3);
         }
         
@@ -167,18 +169,20 @@ void OnTick()
             double entryTwo = prev.high - (bodySize(prev)/2);
             double entryThree = sl + (_Point * 1500);
             double tp = entryOne + (_Point * 3000);
-            double volume = lotSize; // FIXED: Do not multiply by Account Balance!
+            double volume1 = lotSize; // FIXED: Do not multiply by Account Balance!
+            double volume2 = 0.01; // FIXED: Do not multiply by Account Balance!
+            double volume3 = 0.02; // FIXED: Do not multiply by Account Balance!
             //Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
             Print("Found [Sell To Buy OB] ::" + "SELL:" + prev.time + prev.open + "BUY: "+ live.time + live.open + " :: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ::==ENTRIES ("+entryOne+" /"+entryTwo+" /"+entryThree);
 
             //ask type buy long
-            CFutureOrder *newBuyOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_BUY);
+            CFutureOrder *newBuyOrder1 = new CFutureOrder(entryOne, sl, tp, volume1, ORDER_TYPE_BUY,prev.time);
             orderQueue.Add(newBuyOrder1);
             
-            CFutureOrder *newBuyOrder2 = new CFutureOrder(entryTwo, sl, tp, volume, ORDER_TYPE_BUY);
+            CFutureOrder *newBuyOrder2 = new CFutureOrder(entryTwo, sl, tp, volume2, ORDER_TYPE_BUY,prev.time);
             orderQueue.Add(newBuyOrder2);
             
-            CFutureOrder *newBuyOrder3 = new CFutureOrder(entryThree, sl, tp, volume, ORDER_TYPE_BUY);
+            CFutureOrder *newBuyOrder3 = new CFutureOrder(entryThree, sl, tp, volume3, ORDER_TYPE_BUY,prev.time);
             orderQueue.Add(newBuyOrder3);
         }
         
@@ -197,24 +201,21 @@ void OnTradeTransaction(const MqlTradeTransaction& trans,
                         const MqlTradeRequest& request,
                         const MqlTradeResult& result)
 {
-    // 1. Check if the transaction type is a 'Deal' (a trade was executed)
     if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
     {
-        // 2. Select the deal from history to get details
         if(HistoryDealSelect(trans.deal))
         {
             long reason = HistoryDealGetInteger(trans.deal, DEAL_REASON);
             double profit = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
-            string symbol = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
+            string comment = HistoryDealGetString(trans.deal, DEAL_COMMENT); // Retrieve our tag
 
-            // 3. Filter for SL or TP hits
-            if(reason == DEAL_REASON_SL)
+            if(reason == DEAL_REASON_SL || reason == DEAL_REASON_TP)
             {
-                PrintFormat(">>> [STOP LOSS HIT] Symbol: %s | Loss: %.2f USD", symbol, profit);
-            }
-            else if(reason == DEAL_REASON_TP)
-            {
-                PrintFormat(">>> [TAKE PROFIT HIT] Symbol: %s | Profit: %.2f USD", symbol, profit);
+                string hitType = (reason == DEAL_REASON_SL) ? "STOP LOSS" : "TAKE PROFIT";
+                
+                // This print now tells you exactly which OB candle to look at on the chart
+                PrintFormat(">>> [%s HIT] | Profit: %.2f | Created by OB at: %s", 
+                            hitType, profit, comment);
             }
         }
     }
@@ -286,10 +287,11 @@ void CheckAndExecuteOrders()
       {
          // 1. Execute
          bool tradeSuccess = false;
+         string obComment = "OB:" + TimeToString(currentOrder.obTime);
          if(currentOrder.type == ORDER_TYPE_BUY)
-            tradeSuccess = trade.Buy(currentOrder.volume, _Symbol, currentAsk, currentOrder.stopLoss, currentOrder.takeProfit);
+            tradeSuccess = trade.Buy(currentOrder.volume, _Symbol, currentAsk, currentOrder.stopLoss, currentOrder.takeProfit,obComment);
          else
-            tradeSuccess = trade.Sell(currentOrder.volume, _Symbol, currentBid, currentOrder.stopLoss, currentOrder.takeProfit);
+            tradeSuccess = trade.Sell(currentOrder.volume, _Symbol, currentBid, currentOrder.stopLoss, currentOrder.takeProfit,obComment);
 
          if(!tradeSuccess) {
             Print("TRADE FAILED! Order Type: ", EnumToString(currentOrder.type), 
