@@ -99,7 +99,7 @@ double OnTester()
 void OnTick()
 {
     // 1. STATE MANAGEMENT
-    //CheckAndExecuteOrders();
+    CheckAndExecuteOrders();
     if(PositionsTotal() >= 6) return;
     //Print(PositionsTotal()); 
 
@@ -135,7 +135,7 @@ void OnTick()
         bool isSellToBuyOB = (isSell(prev) && isBuy(live) && bodySize(prev)>0 && bodySize(prev)<bodySize(live));
         
         if(isBuyToSellOB){
-            Print("Found [Buy To Sell OB] ::" + "BUY:" + prev.time + prev.open + "SELL: "+ live.time + live.open);
+            //Print("Found [Buy To Sell OB] ::" + "BUY:" + prev.time + prev.open + "SELL: "+ live.time + live.open);
             
             //double sl = MathMax(upperWick(prev),upperWick(live)) + (_Point * 200) // Stop Loss With spread
             double sl = upperWick(prev)>upperWick(live) ? prev.high + (_Point * 1500) : live.high + (_Point * 1500);
@@ -146,6 +146,7 @@ void OnTick()
             double volume = lotSize; // FIXED: Do not multiply by Account Balance!
 
             //Print("[B 2 S]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
+            Print("Found [Buy To Sell OB] ::" + "BUY:" + prev.time + prev.open + "SELL: "+ live.time + live.open + " :: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ::==ENTRIES ("+entryOne+" /"+entryTwo+" /"+entryThree);
             //bid type sell short
             CFutureOrder *newSellOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_SELL);
             orderQueue.Add(newSellOrder1);
@@ -159,7 +160,7 @@ void OnTick()
         
         if(isSellToBuyOB){
             //Print("Found [Sell To Buy OB] :");
-            Print("Found [Sell To Buy OB] ::" + "SELL:" + prev.time + prev.open + "BUY: "+ live.time + live.open);
+            //Print("Found [Sell To Buy OB] ::" + "SELL:" + prev.time + prev.open + "BUY: "+ live.time + live.open);
 
             double sl = lowerWick(prev)>lowerWick(live) ? prev.low - (_Point * 1500) : live.low - (_Point * 1500);
             double entryOne = prev.high + (_Point * 1500);
@@ -168,6 +169,7 @@ void OnTick()
             double tp = entryOne + (_Point * 3000);
             double volume = lotSize; // FIXED: Do not multiply by Account Balance!
             //Print("[S 2 B]:: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ENTRY ONE:"+entryOne+" ENTRY TWO:"+entryTwo+" ENTRY THREE:"+entryThree);
+            Print("Found [Sell To Buy OB] ::" + "SELL:" + prev.time + prev.open + "BUY: "+ live.time + live.open + " :: STOPLOSS: "+sl+" TAKEPROFIT: "+tp+" ::==ENTRIES ("+entryOne+" /"+entryTwo+" /"+entryThree);
 
             //ask type buy long
             CFutureOrder *newBuyOrder1 = new CFutureOrder(entryOne, sl, tp, volume, ORDER_TYPE_BUY);
@@ -190,6 +192,32 @@ void OnTick()
     
 
     
+}
+void OnTradeTransaction(const MqlTradeTransaction& trans,
+                        const MqlTradeRequest& request,
+                        const MqlTradeResult& result)
+{
+    // 1. Check if the transaction type is a 'Deal' (a trade was executed)
+    if(trans.type == TRADE_TRANSACTION_DEAL_ADD)
+    {
+        // 2. Select the deal from history to get details
+        if(HistoryDealSelect(trans.deal))
+        {
+            long reason = HistoryDealGetInteger(trans.deal, DEAL_REASON);
+            double profit = HistoryDealGetDouble(trans.deal, DEAL_PROFIT);
+            string symbol = HistoryDealGetString(trans.deal, DEAL_SYMBOL);
+
+            // 3. Filter for SL or TP hits
+            if(reason == DEAL_REASON_SL)
+            {
+                PrintFormat(">>> [STOP LOSS HIT] Symbol: %s | Loss: %.2f USD", symbol, profit);
+            }
+            else if(reason == DEAL_REASON_TP)
+            {
+                PrintFormat(">>> [TAKE PROFIT HIT] Symbol: %s | Profit: %.2f USD", symbol, profit);
+            }
+        }
+    }
 }
 
 // Optimized Logger stays the same...
